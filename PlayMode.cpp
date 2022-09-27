@@ -12,23 +12,23 @@
 
 #include <random>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+GLuint meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
+Load< Scene > game_scene(LoadTagDefault, []() -> Scene const * {
 	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
+		Mesh const &mesh = meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
 		drawable.pipeline = lit_color_texture_program_pipeline;
 
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = meshes_for_lit_color_texture_program;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -36,32 +36,31 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
-Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
+Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("dusty-floor.opus"));
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
+PlayMode::PlayMode() : scene(*game_scene) {
 	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
 	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
-
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
 
+	// bit of help from David Lyons on where to get started with this
+	// based on https://github.com/harfbuzz/harfbuzz-tutorial/blob/master/hello-harfbuzz-freetype.c
+	FT_Init_FreeType(&ft_library);
+	FT_New_Face(ft_library, data_path("NotoSansMono-Bold.ttf").c_str(), 0, &ft_face);
+	FT_Set_Char_Size(ft_face, 36 * 64, 36 * 64, 0, 0);
+
+	hb_font = hb_ft_font_create(ft_face, NULL);
+	hb_buffer = hb_buffer_create();
+
 	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
+	// leg_tip_loop = Sound::loop_3D(*bg_sample, 1.0f, get_leg_tip_position(), 10.0f);
 }
 
 PlayMode::~PlayMode() {
@@ -109,74 +108,12 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEMOTION) {
-		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
-			return true;
-		}
 	}
 
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
-
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
-	//move sound to follow leg tip position:
-	leg_tip_loop->set_position(get_leg_tip_position(), 1.0f / 60.0f);
-
-	//move camera:
-	{
-
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
-
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
-	}
-
-	{ //update listener to camera position:
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 frame_right = frame[0];
-		glm::vec3 frame_at = frame[3];
-		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
-	}
 
 	//reset button press counters:
 	left.downs = 0;
@@ -207,30 +144,96 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	scene.draw(*camera);
 
 	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
+		// glDisable(GL_DEPTH_TEST);
+		// float aspect = float(drawable_size.x) / float(drawable_size.y);
+		// DrawLines lines(glm::mat4(
+		// 	1.0f / aspect, 0.0f, 0.0f, 0.0f,
+		// 	0.0f, 1.0f, 0.0f, 0.0f,
+		// 	0.0f, 0.0f, 1.0f, 0.0f,
+		// 	0.0f, 0.0f, 0.0f, 1.0f
+		// ));
 
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		// constexpr float H = 0.09f;
+		// lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		// 	glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+		// 	glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+		// 	glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+		// float ofs = 2.0f / drawable_size.y;
+		// lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		// 	glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
+		// 	glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+		// 	glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		render_text("hello world", glm::vec2(10, 10), drawable_size);
 	}
 	GL_ERRORS();
 }
 
-glm::vec3 PlayMode::get_leg_tip_position() {
-	//the vertex position here was read from the model in blender:
-	return lower_leg->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
+void PlayMode::render_text(std::string text, glm::vec2 pos_xy, glm::uvec2 const& drawable_size) {
+
+	glm::vec2 pos = pos_xy;
+
+	// based on https://github.com/harfbuzz/harfbuzz-tutorial/blob/master/hello-harfbuzz-freetype.c
+	hb_buffer_clear_contents(hb_buffer);
+	hb_buffer_add_utf8(hb_buffer, text.c_str(), -1, 0, -1);
+	hb_buffer_guess_segment_properties(hb_buffer);
+
+	hb_shape(hb_font, hb_buffer, NULL, 0);
+
+	uint32_t len = hb_buffer_get_length(hb_buffer);
+	hb_glyph_info_t* glyph_infos = hb_buffer_get_glyph_infos(hb_buffer, NULL);
+	hb_glyph_position_t* glyph_positions = hb_buffer_get_glyph_positions(hb_buffer, NULL);
+
+	// based on https://learnopengl.com/In-Practice/Text-Rendering (including the for loop below)
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(VAO);
+
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);      
+
+	for (uint32_t i = 0; i < len; i++) {
+		// based on https://freetype.org/freetype2/docs/tutorial/step1.html
+		hb_codepoint_t glyph_index = glyph_infos[i].codepoint;
+		FT_Load_Glyph(ft_face, glyph_index, FT_LOAD_DEFAULT);
+		FT_Render_Glyph(ft_face->glyph, FT_RENDER_MODE_NORMAL);
+
+        float w = static_cast<float>(ft_face->glyph->bitmap.width);
+        float h = static_cast<float>(ft_face->glyph->bitmap.rows);
+
+		float xpos = pos.x + ft_face->glyph->bitmap_left;
+        float ypos = pos.y + ft_face->glyph->bitmap_top - h;
+
+        // update VBO for each character
+        float vertices[6][4] = {
+            { xpos,     ypos + h,   0.0f, 0.0f },            
+            { xpos,     ypos,       0.0f, 1.0f },
+            { xpos + w, ypos,       1.0f, 1.0f },
+
+            { xpos,     ypos + h,   0.0f, 0.0f },
+            { xpos + w, ypos,       1.0f, 1.0f },
+            { xpos + w, ypos + h,   1.0f, 0.0f }           
+        };
+		// render glyph texture over quad
+        // glBindTexture(GL_TEXTURE_2D, ch.textureID);
+        // update content of VBO memory
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices); 
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        // render quad
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        // now advance cursors for next glyph (note that advance is number of 1/64 pixels)
+        pos += glm::vec2(glyph_positions[i].x_advance >> 6, glyph_positions[i].y_advance >> 6); // bitshift by 6 to get value in pixels in both x and y (2^6 = 64)
+	}
+
+	glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }

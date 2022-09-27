@@ -4,6 +4,9 @@
 #include "Sound.hpp"
 
 #include <glm/glm.hpp>
+#include <hb.h>
+#include <hb-ft.h>
+#include <freetype/freetype.h>
 
 #include <vector>
 #include <deque>
@@ -17,7 +20,17 @@ struct PlayMode : Mode {
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
+	void render_text(std::string text, glm::vec2 pos, glm::uvec2 const& drawable_size);
+
 	//----- game state -----
+
+	//text rendering: (see PlayMode() for initialization)
+	FT_Library ft_library;
+	FT_Face ft_face;
+	hb_font_t* hb_font;
+	hb_buffer_t* hb_buffer;
+
+	GLuint VAO, VBO, texture, sampler, vs ,fs, program;
 
 	//input tracking:
 	struct Button {
@@ -30,14 +43,6 @@ struct PlayMode : Mode {
 
 	//hexapod leg to wobble:
 	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
-
-	glm::vec3 get_leg_tip_position();
 
 	//music coming from the tip of the leg (as a demonstration):
 	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
