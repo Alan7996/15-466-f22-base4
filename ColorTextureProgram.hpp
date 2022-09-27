@@ -15,7 +15,7 @@ struct ColorTextureProgram {
 	//Uniform (per-invocation variable) locations:
 	// based on https://learnopengl.com/In-Practice/Text-Rendering
 	GLuint projection = -1U;
-	GLuint textColor = 1U;
+	GLuint textColor = -1U;
 	//Textures:
 	//TEXTURE0 - texture that is accessed by TexCoord
 };

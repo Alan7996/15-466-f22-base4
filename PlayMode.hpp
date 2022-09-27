@@ -38,16 +38,10 @@ struct PlayMode : Mode {
 		uint8_t pressed = 0;
 	} left, right, down, up;
 
-	//local copy of the game scene (so code can change it during gameplay):
-	Scene scene;
+	//background music
+	// std::shared_ptr< Sound::PlayingSample > bg_loop;
 
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-
-	//music coming from the tip of the leg (as a demonstration):
-	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
-	
-	//camera:
-	Scene::Camera *camera = nullptr;
+	//game-related strings
+	std::string message;
 
 };
