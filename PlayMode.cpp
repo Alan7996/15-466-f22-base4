@@ -208,6 +208,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 void PlayMode::render_text(std::string text, glm::vec2 pos_xy, glm::uvec2 const& drawable_size, glm::vec3 color) {
 
+	// this function is heavily inspired by David Lyon's work
 	glm::vec2 pos = pos_xy;
 
 	// based on https://github.com/harfbuzz/harfbuzz-tutorial/blob/master/hello-harfbuzz-freetype.c
