@@ -4,6 +4,8 @@ Author: Alan Lee / soohyun3
 
 Design: You are a spy who wants to extract the nuclear launch code from your boss! Defeat the computer security to obtain the code!
 
+This game drew inspiration from an indie game OneShot.
+
 Text Drawing: The texts are rendered at runtime. Only at most 8(-ish) lines of 
 texts are draw at any given moment, and the string versions of these texts are
 initialized and stored as a queue form using `std::vector`s. Once we know which
@@ -16,7 +18,7 @@ Choices: All of the choices and narratives are initialized and stored inside
 only read from right to left (or back to front) of the (improperly named) stack
  of commands. Each command has a distinct first code that identifies whether 
 the game should 1. print the message 2. update last message sent 3. provide a 
-set of user choice and wait 4. perform a special check 5. terminate. Then it 
+set of user choices and wait 4. perform a special check 5. terminate. Then it 
 stores the string relevant to the task (set to empty string if not needed), the
  amount of time in milliseconds to be waited before executing this task, and 
 color assignment for the text color. The "jumping" of this one-directional tape

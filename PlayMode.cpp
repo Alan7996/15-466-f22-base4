@@ -16,10 +16,6 @@
 #include <iostream>
 #include <fstream>
 
-Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("bg.wav"));
-});
-
 PlayMode::PlayMode() {
 	
 	// bit of help from David Lyons on where to get started with this
@@ -196,13 +192,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ //render texts
 		glDisable(GL_DEPTH_TEST);
 		
-		for (int i = 0; i < messages.size(); i++) {
+		for (int i = 0; i < static_cast<int>(messages.size()); i++) {
 			render_text(messages[i], glm::vec2(drawable_size.x / 10.0f, drawable_size.y * static_cast<float>(i + 2) / 10.0f), drawable_size, colors[i]);
 		}
 
 		render_text(">", glm::vec2(drawable_size.x / 20.0f, drawable_size.y / 10.0f), drawable_size, default_color);
 
-		for (int i = 0; i < user_choices.size(); i++) {
+		for (int i = 0; i < static_cast<int>(user_choices.size()); i++) {
 			render_text(std::get<0>(user_choices[i]), glm::vec2(drawable_size.x * static_cast<float>(2.0f * i + 1) / 10.0f, drawable_size.y / 10.0f), drawable_size, colors[0]);
 		}
 		if (game_state == PLAYING) render_text("____", glm::vec2(drawable_size.x * static_cast<float>(2.0f * hovering_text + 1) / 10.0f, drawable_size.y / 20.0f), drawable_size, default_color);
