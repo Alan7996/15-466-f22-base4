@@ -20,9 +20,18 @@ struct PlayMode : Mode {
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
-	void render_text(std::string text, glm::vec2 pos, glm::uvec2 const& drawable_size);
+	void render_text(std::string text, glm::vec2 pos, glm::uvec2 const& drawable_size, glm::vec3 color);
+
+	void add_message(std::string msg, int wait = 0, glm::vec3 color = glm::vec3(0.0f));
+	void update_message(std::string msg, int wait = 0);
+	void output_text(glm::uvec2 const &drawable_size);
+	void take_input();
 
 	//----- game state -----
+	enum {
+		WAITING, // waiting while texts play out
+		PLAYING, // making a choice
+	} game_state;
 
 	//text rendering: (see PlayMode() for initialization)
 	FT_Library ft_library;
@@ -32,16 +41,22 @@ struct PlayMode : Mode {
 
 	GLuint VAO, VBO, texture, sampler, vs ,fs, program;
 
-	//input tracking:
-	struct Button {
-		uint8_t downs = 0;
-		uint8_t pressed = 0;
-	} left, right, down, up;
+	//game-related
+	glm::vec3 default_color = glm::vec3(0.5f, 0.8f, 0.2f);
+	glm::vec3 choice_color = glm::vec3(0.6f, 0.4f, 0.6f);
+	glm::vec3 incorrect_color = glm::vec3(0.8f, 0.2f, 0.2f);
+	glm::vec3 win_color = glm::vec3(1.0f);
 
-	//background music
-	// std::shared_ptr< Sound::PlayingSample > bg_loop;
+	uint8_t MAX_MSG_SIZE = 7;
+	std::vector<std::string> messages;
+	std::vector<glm::vec3> colors;
+	std::vector<std::tuple<std::string, int>> user_choices;
+	uint8_t hovering_text = 0;
 
-	//game-related strings
-	std::string message;
+	std::vector<std::tuple<int, std::string, int, glm::vec3>> msg_stack; // action x msg x wait
+	std::vector<std::vector<std::tuple<std::string, int>>> choice_stack;
+	std::vector<int> task_stack;
 
+	int task_index = -1;
+	
 };
